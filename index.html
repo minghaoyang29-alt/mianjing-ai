@@ -8656,23 +8656,56 @@ const App = (function () {
       var lang = i18n.currentLang === 'en' ? 'en-US' : 'zh-CN';
       var answerArea = document.getElementById('chat-input');
 
+      micBtn.classList.add('listening');
+      micBtn.innerHTML = '<span class="mic-icon">&#127908;</span> 正在启动...';
+
+      // 启动语音识别，设置超时检测
+      var hasResult = false;
+      var startTimeout = setTimeout(function() {
+        if (!hasResult) {
+          Speech.stop();
+          micBtn.classList.remove('listening');
+          micBtn.innerHTML = '<span class="mic-icon">&#127908;</span>';
+          alert('语音识别无法启动。\n\n可能原因：\n1. 网络无法连接Google语音服务（中国大陆网络限制）\n2. 麦克风权限未授予\n3. 浏览器不支持\n\n建议：请直接使用键盘输入回答。');
+        }
+      }, 8000);
+
       Speech.start(lang, function (text, isFinal) {
+        hasResult = true;
+        clearTimeout(startTimeout);
+
         if (answerArea) {
           if (isFinal) {
             answerArea.value += text;
+            micBtn.innerHTML = '<span class="mic-icon">&#9989;</span> 已识别';
+            setTimeout(function() {
+              if (Speech.getListeningState && Speech.getListeningState()) {
+                micBtn.innerHTML = '<span class="mic-icon">&#127908;</span> 聆听中...';
+              }
+            }, 1500);
+          } else {
+            answerArea.placeholder = '识别中: ' + text;
           }
-          answerArea.placeholder = text || '输入你的回答...';
         }
       }, function (error) {
+        hasResult = true;
+        clearTimeout(startTimeout);
         micBtn.classList.remove('listening');
         micBtn.innerHTML = '<span class="mic-icon">&#127908;</span>';
-        if (error && error !== 'not-allowed') {
-          console.warn('语音识别结束:', error);
+        if (error === 'network') {
+          alert('语音识别需要连接Google服务器，当前网络环境可能无法访问。\n请直接使用键盘输入回答。');
         }
       });
 
       micBtn.classList.add('listening');
       micBtn.innerHTML = '<span class="mic-icon">&#127908;</span> 聆听中...';
+
+      // 5秒后如果还没有识别到任何内容，给用户提示
+      setTimeout(function() {
+        if (!hasResult && Speech.getListeningState && Speech.getListeningState()) {
+          micBtn.innerHTML = '<span class="mic-icon">&#127908;</span> 听不到声音，请对着麦克风说话...';
+        }
+      }, 5000);
     }
   }
 
@@ -9157,9 +9190,9 @@ const App = (function () {
 
     Collab.createRoom();
 
-    Collab.on('offerCreated', function(sdp) {
+    Collab.on('offerCreated', function(data) {
       var offerArea = document.getElementById('offer-code');
-      if (offerArea) offerArea.value = sdp;
+      if (offerArea) offerArea.value = (typeof data === 'object' && data.sdp) ? data.sdp : String(data);
       var roomCreated = document.getElementById('room-created');
       if (roomCreated) roomCreated.classList.remove('hidden');
     });
@@ -9199,9 +9232,9 @@ const App = (function () {
 
     Collab.joinRoom('PEER');
 
-    Collab.on('answerCreated', function(sdp) {
+    Collab.on('answerCreated', function(data) {
       var answerArea = document.getElementById('answer-code');
-      if (answerArea) answerArea.value = sdp;
+      if (answerArea) answerArea.value = (typeof data === 'object' && data.sdp) ? data.sdp : String(data);
       var roomJoined = document.getElementById('room-joined');
       if (roomJoined) roomJoined.classList.remove('hidden');
     });
